@@ -78,7 +78,7 @@ impl From<ed25519_dalek::SignatureError> for Error {
     }
 }
 
-/// An Minisign public key
+/// A Minisign public key
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublicKey {
     untrusted_comment: Option<String>,
