@@ -2,7 +2,7 @@
 name = "minisign-verify"
 version = "0.1.0"
 authors = ["Frank Denis <github@pureftpd.org>"]
-description = "A small crate to verify Minisign signatures"
+description = "A small crate to verify Minisign signatures."
 keywords = ["minisign", "ed25519", "signatures", "crypto"]
 license = "MIT"
 homepage = "https://github.com/jedisct1/rust-minisign-verify"
