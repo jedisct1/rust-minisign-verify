@@ -1,6 +1,6 @@
 [package]
 name = "minisign-verify"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Frank Denis <github@pureftpd.org>"]
 description = "A small crate to verify Minisign signatures."
 keywords = ["minisign", "ed25519", "signatures", "crypto"]
@@ -11,4 +11,3 @@ categories = ["cryptography"]
 
 [dependencies]
 base64 = "0.10.1"
-ed25519-dalek = "1.0.0-pre"

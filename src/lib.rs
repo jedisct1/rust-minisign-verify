@@ -20,8 +20,9 @@
 //! ```
 
 extern crate base64;
-extern crate ed25519_dalek;
+mod crypto;
 
+use crate::crypto::ed25519;
 use std::path::Path;
 use std::{fmt, fs, io};
 #[derive(Debug)]
@@ -69,12 +70,6 @@ impl From<base64::DecodeError> for Error {
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Error {
         Error::IoError(e)
-    }
-}
-
-impl From<ed25519_dalek::SignatureError> for Error {
-    fn from(_e: ed25519_dalek::SignatureError) -> Error {
-        Error::InvalidSignature
     }
 }
 
@@ -203,19 +198,16 @@ impl PublicKey {
         if !signature.trusted_comment.starts_with("trusted comment: ") {
             Err(Error::InvalidEncoding)?
         }
-        let dalek_signature = ed25519_dalek::Signature::from_bytes(&signature.signature)
-            .map_err(|_| Error::InvalidEncoding)?;
-        let dalek_public_key =
-            ed25519_dalek::PublicKey::from_bytes(&self.key).map_err(|_| Error::InvalidEncoding)?;
-        dalek_public_key.verify(bin, &dalek_signature)?;
+        if !ed25519::verify(bin, &self.key, &signature.signature) {
+            Err(Error::InvalidSignature)?
+        }
         let trusted_comment_bin = signature.trusted_comment().as_bytes();
         let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
         global.extend_from_slice(&signature.signature[..]);
         global.extend_from_slice(trusted_comment_bin);
-        let dalek_global_signature =
-            ed25519_dalek::Signature::from_bytes(&signature.global_signature)
-                .map_err(|_| Error::InvalidEncoding)?;
-        dalek_public_key.verify(&global, &dalek_global_signature)?;
+        if !ed25519::verify(&global, &self.key, &signature.global_signature) {
+            Err(Error::InvalidSignature)?
+        }
         Ok(())
     }
 }
