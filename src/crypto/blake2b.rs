@@ -33,11 +33,11 @@ static SIGMA: [[usize; 16]; 12] = [
     [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3],
 ];
 
-const BLAKE2B_BLOCKBYTES: usize = 128;
-const BLAKE2B_OUTBYTES: usize = 64;
-const BLAKE2B_KEYBYTES: usize = 64;
-const BLAKE2B_SALTBYTES: usize = 16;
-const BLAKE2B_PERSONALBYTES: usize = 16;
+pub const BLAKE2B_BLOCKBYTES: usize = 128;
+pub const BLAKE2B_OUTBYTES: usize = 64;
+pub const BLAKE2B_KEYBYTES: usize = 64;
+pub const BLAKE2B_SALTBYTES: usize = 16;
+pub const BLAKE2B_PERSONALBYTES: usize = 16;
 
 #[derive(Copy)]
 pub struct Blake2b {
@@ -46,8 +46,8 @@ pub struct Blake2b {
     f: [u64; 2],
     buf: [u8; 2 * BLAKE2B_BLOCKBYTES],
     buflen: usize,
-    key: [u8; BLAKE2B_KEYBYTES],
-    key_length: u8,
+    _key: [u8; BLAKE2B_KEYBYTES],
+    _key_length: u8,
     last_node: u8,
     digest_length: u8,
     computed: bool, // whether the final digest has been computed
@@ -123,11 +123,11 @@ impl Blake2b {
             buf: [0; 2 * BLAKE2B_BLOCKBYTES],
             buflen: 0,
             last_node: 0,
-            digest_length: digest_length,
+            digest_length,
             computed: false,
-            key: [0; BLAKE2B_KEYBYTES],
-            key_length: 0u8,
-            param: param,
+            _key: [0; BLAKE2B_KEYBYTES],
+            _key_length: 0u8,
+            param,
         }
     }
 
@@ -225,7 +225,7 @@ impl Blake2b {
     }
 
     fn update(&mut self, mut input: &[u8]) {
-        while input.len() > 0 {
+        while !input.is_empty() {
             let left = self.buflen;
             let fill = 2 * BLAKE2B_BLOCKBYTES - left;
 

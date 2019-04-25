@@ -22,7 +22,10 @@
 extern crate base64;
 mod crypto;
 
+
+use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
+
 use std::path::Path;
 use std::{fmt, fs, io};
 #[derive(Debug)]
@@ -151,6 +154,10 @@ impl PublicKey {
         }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin[0..2]);
+        match (signature_algorithm[0], signature_algorithm[1]) {
+            (0x45, 0x64) | (0x45, 0x44) => {}
+            _ => Err(Error::UnsupportedAlgorithm)?,
+        };
         let mut key_id = [0u8; 8];
         key_id.copy_from_slice(&bin[2..10]);
         let mut key = [0u8; 32];
@@ -186,12 +193,22 @@ impl PublicKey {
 
     /// Verify that `signature` is a valid signature for `bin` using this public key
     pub fn verify(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
-        if self.signature_algorithm != signature.signature_algorithm {
-            Err(Error::UnexpectedAlgorithm)?
-        }
-        if signature.signature_algorithm[0] != 0x45 || signature.signature_algorithm[1] != 0x64 {
-            Err(Error::UnsupportedAlgorithm)?
-        }
+        let prehashed = match (
+            signature.signature_algorithm[0],
+            signature.signature_algorithm[1],
+        ) {
+            (0x45, 0x64) => false,
+            (0x45, 0x44) => true,
+            _ => Err(Error::UnsupportedAlgorithm)?,
+        };
+        let mut h;
+        let bin = if prehashed {
+            h = vec![0u8; BLAKE2B_OUTBYTES];
+            Blake2b::blake2b(&mut h, bin);
+            &h
+        } else {
+            bin
+        };
         if self.key_id != signature.key_id {
             Err(Error::UnexpectedKeyId)?
         }
@@ -243,7 +260,7 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
         let bin = b"Test";
         match public_key.verify(&bin[..], &signature) {
             Err(Error::InvalidSignature) => {}
-            _ => assert!(false, "Invalid signature verified"),
+            _ => panic!("Invalid signature verified"),
         };
 
         let public_key2 = PublicKey::decode(
@@ -257,7 +274,34 @@ RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
         );
         match public_key2.verify(&bin[..], &signature) {
             Err(Error::InvalidSignature) => {}
-            _ => assert!(false, "Invalid signature verified"),
+            _ => panic!("Invalid signature verified"),
         };
+    }
+
+    #[test]
+    fn verify_prehashed() {
+        let public_key =
+            PublicKey::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
+                .expect("Unable to decode the public key");
+        assert_eq!(public_key.untrusted_comment(), None);
+        let signature = Signature::decode(
+            "untrusted comment: signature from minisign secret key
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+trusted comment: timestamp:1556193335\tfile:test
+y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==",
+        )
+        .expect("Unable to decode the signature");
+        assert_eq!(
+            signature.untrusted_comment(),
+            "untrusted comment: signature from minisign secret key"
+        );
+        assert_eq!(
+            signature.trusted_comment(),
+            "timestamp:1556193335\tfile:test"
+        );
+        let bin = b"test";
+        public_key
+            .verify(&bin[..], &signature)
+            .expect("Signature didn't verify");
     }
 }
