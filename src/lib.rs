@@ -22,7 +22,6 @@
 extern crate base64;
 mod crypto;
 
-
 use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
 
