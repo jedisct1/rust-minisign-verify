@@ -12,4 +12,5 @@ mod simd;
 mod step_by;
 mod util;
 
+pub mod blake2b;
 pub mod ed25519;
