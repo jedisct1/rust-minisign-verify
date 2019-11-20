@@ -10,7 +10,7 @@ repository = "https://github.com/jedisct1/rust-minisign-verify"
 categories = ["cryptography"]
 
 [dependencies]
-base64 = "0.10.1"
+base64 = "0.11"
 
 [profile.release]
 lto = true
