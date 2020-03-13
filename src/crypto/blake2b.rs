@@ -8,14 +8,14 @@ use super::cryptoutil::{copy_memory, read_u64v_le, write_u64v_le};
 use super::digest::Digest;
 
 static IV: [u64; 8] = [
-    0x6a09e667f3bcc908,
-    0xbb67ae8584caa73b,
-    0x3c6ef372fe94f82b,
-    0xa54ff53a5f1d36f1,
-    0x510e527fade682d1,
-    0x9b05688c2b3e6c1f,
-    0x1f83d9abfb41bd6b,
-    0x5be0cd19137e2179,
+    0x6a09_e667_f3bc_c908,
+    0xbb67_ae85_84ca_a73b,
+    0x3c6e_f372_fe94_f82b,
+    0xa54f_f53a_5f1d_36f1,
+    0x510e_527f_ade6_82d1,
+    0x9b05_688c_2b3e_6c1f,
+    0x1f83_d9ab_fb41_bd6b,
+    0x5be0_cd19_137e_2179,
 ];
 
 static SIGMA: [[usize; 16]; 12] = [
@@ -100,14 +100,14 @@ macro_rules! round( ($r:expr, $v:expr, $m:expr) => ( {
 
 impl Blake2b {
     fn set_lastnode(&mut self) {
-        self.f[1] = 0xFFFFFFFFFFFFFFFF;
+        self.f[1] = 0xFFFF_FFFF_FFFF_FFFF;
     }
 
     fn set_lastblock(&mut self) {
         if self.last_node != 0 {
             self.set_lastnode();
         }
-        self.f[0] = 0xFFFFFFFFFFFFFFFF;
+        self.f[0] = 0xFFFF_FFFF_FFFF_FFFF;
     }
 
     fn increment_counter(&mut self, inc: u64) {
@@ -154,7 +154,7 @@ impl Blake2b {
         let mut param_words: [u64; 8] = [0; 8];
         read_u64v_le(&mut param_words, &param_bytes);
         for (h, param_word) in self.h.iter_mut().zip(param_words.iter()) {
-            *h = *h ^ *param_word;
+            *h ^= *param_word;
         }
     }
 

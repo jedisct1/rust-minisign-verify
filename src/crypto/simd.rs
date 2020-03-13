@@ -13,7 +13,7 @@ pub trait SimdExt {
 impl SimdExt for fake::u32x4 {
     fn simd_eq(self, rhs: Self) -> Self {
         if self == rhs {
-            fake::u32x4(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff)
+            fake::u32x4(0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff)
         } else {
             fake::u32x4(0, 0, 0, 0)
         }

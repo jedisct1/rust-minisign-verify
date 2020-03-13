@@ -102,12 +102,12 @@ impl Signature {
         let untrusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
         let bin1 = base64::decode(lines.next().ok_or(Error::InvalidEncoding)?)?;
         if bin1.len() != 74 {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         let trusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
         let bin2 = base64::decode(lines.next().ok_or(Error::InvalidEncoding)?)?;
         if bin2.len() != 64 {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin1[0..2]);
@@ -149,13 +149,13 @@ impl PublicKey {
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
         let bin = base64::decode(&public_key_b64)?;
         if bin.len() != 42 {
-            Err(Error::InvalidEncoding)?;
+            return Err(Error::InvalidEncoding);
         }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin[0..2]);
         match (signature_algorithm[0], signature_algorithm[1]) {
             (0x45, 0x64) | (0x45, 0x44) => {}
-            _ => Err(Error::UnsupportedAlgorithm)?,
+            _ => return Err(Error::UnsupportedAlgorithm),
         };
         let mut key_id = [0u8; 8];
         key_id.copy_from_slice(&bin[2..10]);
@@ -187,7 +187,7 @@ impl PublicKey {
 
     /// Return the untrusted comment, if there is one
     pub fn untrusted_comment(&self) -> Option<&str> {
-        self.untrusted_comment.as_ref().map(String::as_str)
+        self.untrusted_comment.as_deref()
     }
 
     /// Verify that `signature` is a valid signature for `bin` using this public key
@@ -198,7 +198,7 @@ impl PublicKey {
         ) {
             (0x45, 0x64) => false,
             (0x45, 0x44) => true,
-            _ => Err(Error::UnsupportedAlgorithm)?,
+            _ => return Err(Error::UnsupportedAlgorithm),
         };
         let mut h;
         let bin = if prehashed {
@@ -209,20 +209,20 @@ impl PublicKey {
             bin
         };
         if self.key_id != signature.key_id {
-            Err(Error::UnexpectedKeyId)?
+            return Err(Error::UnexpectedKeyId);
         }
         if !signature.trusted_comment.starts_with("trusted comment: ") {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         if !ed25519::verify(bin, &self.key, &signature.signature) {
-            Err(Error::InvalidSignature)?
+            return Err(Error::InvalidSignature);
         }
         let trusted_comment_bin = signature.trusted_comment().as_bytes();
         let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
         global.extend_from_slice(&signature.signature[..]);
         global.extend_from_slice(trusted_comment_bin);
         if !ed25519::verify(&global, &self.key, &signature.global_signature) {
-            Err(Error::InvalidSignature)?
+            return Err(Error::InvalidSignature);
         }
         Ok(())
     }
