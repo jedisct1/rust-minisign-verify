@@ -1,4 +1,4 @@
-use super::curve25519::{sc_reduce, GeP2, GeP3};
+use super::curve25519::{is_identity, sc_reduce, GeP2, GeP3};
 use super::digest::Digest;
 use super::sha2::Sha512;
 use super::util::fixed_time_eq;
@@ -27,7 +27,7 @@ fn check_s_lt_l(s: &[u8]) -> bool {
 }
 
 pub fn verify(message: &[u8], public_key: &[u8], signature: &[u8]) -> bool {
-    if check_s_lt_l(&signature[32..64]) {
+    if check_s_lt_l(&signature[32..64]) || is_identity(public_key) {
         return false;
     }
 

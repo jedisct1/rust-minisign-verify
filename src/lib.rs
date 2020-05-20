@@ -19,12 +19,12 @@
 //! public_key.verify(&bin[..], &signature).expect("Signature didn't verify");
 //! ```
 
-extern crate base64;
 mod crypto;
 
 use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
 
+use ct_codecs::{Base64, Decoder};
 use std::path::Path;
 use std::{fmt, fs, io};
 #[derive(Debug)]
@@ -38,7 +38,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -63,8 +63,8 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<base64::DecodeError> for Error {
-    fn from(_e: base64::DecodeError) -> Error {
+impl From<ct_codecs::Error> for Error {
+    fn from(_e: ct_codecs::Error) -> Error {
         Error::InvalidEncoding
     }
 }
@@ -100,14 +100,14 @@ impl Signature {
     pub fn decode(lines_str: &str) -> Result<Self, Error> {
         let mut lines = lines_str.lines();
         let untrusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
-        let bin1 = base64::decode(lines.next().ok_or(Error::InvalidEncoding)?)?;
+        let bin1 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?, None)?;
         if bin1.len() != 74 {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         let trusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
-        let bin2 = base64::decode(lines.next().ok_or(Error::InvalidEncoding)?)?;
+        let bin2 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?, None)?;
         if bin2.len() != 64 {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin1[0..2]);
@@ -147,15 +147,15 @@ impl Signature {
 impl PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
-        let bin = base64::decode(&public_key_b64)?;
+        let bin = Base64::decode_to_vec(&public_key_b64, None)?;
         if bin.len() != 42 {
-            Err(Error::InvalidEncoding)?;
+            return Err(Error::InvalidEncoding);
         }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin[0..2]);
         match (signature_algorithm[0], signature_algorithm[1]) {
             (0x45, 0x64) | (0x45, 0x44) => {}
-            _ => Err(Error::UnsupportedAlgorithm)?,
+            _ => return Err(Error::UnsupportedAlgorithm),
         };
         let mut key_id = [0u8; 8];
         key_id.copy_from_slice(&bin[2..10]);
@@ -187,7 +187,7 @@ impl PublicKey {
 
     /// Return the untrusted comment, if there is one
     pub fn untrusted_comment(&self) -> Option<&str> {
-        self.untrusted_comment.as_ref().map(String::as_str)
+        self.untrusted_comment.as_deref()
     }
 
     /// Verify that `signature` is a valid signature for `bin` using this public key
@@ -198,7 +198,7 @@ impl PublicKey {
         ) {
             (0x45, 0x64) => false,
             (0x45, 0x44) => true,
-            _ => Err(Error::UnsupportedAlgorithm)?,
+            _ => return Err(Error::UnsupportedAlgorithm),
         };
         let mut h;
         let bin = if prehashed {
@@ -209,20 +209,20 @@ impl PublicKey {
             bin
         };
         if self.key_id != signature.key_id {
-            Err(Error::UnexpectedKeyId)?
+            return Err(Error::UnexpectedKeyId);
         }
         if !signature.trusted_comment.starts_with("trusted comment: ") {
-            Err(Error::InvalidEncoding)?
+            return Err(Error::InvalidEncoding);
         }
         if !ed25519::verify(bin, &self.key, &signature.signature) {
-            Err(Error::InvalidSignature)?
+            return Err(Error::InvalidSignature);
         }
         let trusted_comment_bin = signature.trusted_comment().as_bytes();
         let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
         global.extend_from_slice(&signature.signature[..]);
         global.extend_from_slice(trusted_comment_bin);
         if !ed25519::verify(&global, &self.key, &signature.global_signature) {
-            Err(Error::InvalidSignature)?
+            return Err(Error::InvalidSignature);
         }
         Ok(())
     }

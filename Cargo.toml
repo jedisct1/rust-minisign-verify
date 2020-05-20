@@ -8,9 +8,10 @@ license = "MIT"
 homepage = "https://github.com/jedisct1/rust-minisign-verify"
 repository = "https://github.com/jedisct1/rust-minisign-verify"
 categories = ["cryptography"]
+edition = "2018"
 
 [dependencies]
-base64 = "0.12"
+ct-codecs = "0.1.1"
 
 [profile.release]
 lto = true
