@@ -1,6 +1,5 @@
 use super::curve25519::{is_identity, sc_reduce, GeP2, GeP3};
-use super::digest::Digest;
-use super::sha2::Sha512;
+use super::sha512;
 use super::util::fixed_time_eq;
 
 static L: [u8; 32] = [
@@ -45,12 +44,11 @@ pub fn verify(message: &[u8], public_key: &[u8], signature: &[u8]) -> bool {
         return false;
     }
 
-    let mut hasher = Sha512::new();
-    hasher.input(&signature[0..32]);
-    hasher.input(public_key);
-    hasher.input(message);
-    let mut hash: [u8; 64] = [0; 64];
-    hasher.result(&mut hash);
+    let mut hasher = sha512::Hash::new();
+    hasher.update(&signature[0..32]);
+    hasher.update(public_key);
+    hasher.update(message);
+    let mut hash = hasher.finalize();
     sc_reduce(&mut hash);
 
     let r = GeP2::double_scalarmult_vartime(hash.as_ref(), a, &signature[32..64]);
