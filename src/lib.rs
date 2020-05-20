@@ -19,12 +19,13 @@
 //! public_key.verify(&bin[..], &signature).expect("Signature didn't verify");
 //! ```
 
+mod base64;
 mod crypto;
 
 use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
 
-use ct_codecs::{Base64, Decoder};
+use base64::{Base64, Decoder};
 use std::path::Path;
 use std::{fmt, fs, io};
 #[derive(Debug)]
@@ -63,8 +64,8 @@ impl std::error::Error for Error {
     }
 }
 
-impl From<ct_codecs::Error> for Error {
-    fn from(_e: ct_codecs::Error) -> Error {
+impl From<base64::Error> for Error {
+    fn from(_e: base64::Error) -> Error {
         Error::InvalidEncoding
     }
 }
@@ -100,12 +101,12 @@ impl Signature {
     pub fn decode(lines_str: &str) -> Result<Self, Error> {
         let mut lines = lines_str.lines();
         let untrusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
-        let bin1 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?, None)?;
+        let bin1 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?)?;
         if bin1.len() != 74 {
             return Err(Error::InvalidEncoding);
         }
         let trusted_comment = lines.next().ok_or(Error::InvalidEncoding)?.to_string();
-        let bin2 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?, None)?;
+        let bin2 = Base64::decode_to_vec(lines.next().ok_or(Error::InvalidEncoding)?)?;
         if bin2.len() != 64 {
             return Err(Error::InvalidEncoding);
         }
@@ -147,7 +148,7 @@ impl Signature {
 impl PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
-        let bin = Base64::decode_to_vec(&public_key_b64, None)?;
+        let bin = Base64::decode_to_vec(&public_key_b64)?;
         if bin.len() != 42 {
             return Err(Error::InvalidEncoding);
         }

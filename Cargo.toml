@@ -10,9 +10,6 @@ repository = "https://github.com/jedisct1/rust-minisign-verify"
 categories = ["cryptography"]
 edition = "2018"
 
-[dependencies]
-ct-codecs = "0.1.1"
-
 [profile.release]
 lto = true
 panic = "abort"
