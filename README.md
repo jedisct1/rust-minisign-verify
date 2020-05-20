@@ -1,6 +1,6 @@
 # minisign-verify
 
-A small Rust crate to verify [Minisign](https://jedisct1.github.io/minisign/) signatures.
+A small, zero-dependencies Rust crate to verify [Minisign](https://jedisct1.github.io/minisign/) signatures.
 
 [API documentation](https://docs.rs/minisign-verify)
 
