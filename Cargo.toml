@@ -1,6 +1,6 @@
 [package]
 name = "minisign-verify"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Frank Denis <github@pureftpd.org>"]
 description = "A small crate to verify Minisign signatures."
 keywords = ["minisign", "ed25519", "signatures", "crypto"]
@@ -10,7 +10,7 @@ repository = "https://github.com/jedisct1/rust-minisign-verify"
 categories = ["cryptography"]
 
 [dependencies]
-base64 = "0.11"
+base64 = "0.12"
 
 [profile.release]
 lto = true
