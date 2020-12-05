@@ -193,6 +193,12 @@ impl PublicKey {
 
     /// Verify that `signature` is a valid signature for `bin` using this public key
     pub fn verify(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
+        if self.key_id != signature.key_id {
+            return Err(Error::UnexpectedKeyId);
+        }
+        if !signature.trusted_comment.starts_with("trusted comment: ") {
+            return Err(Error::InvalidEncoding);
+        }
         let prehashed = match (
             signature.signature_algorithm[0],
             signature.signature_algorithm[1],
@@ -209,12 +215,6 @@ impl PublicKey {
         } else {
             bin
         };
-        if self.key_id != signature.key_id {
-            return Err(Error::UnexpectedKeyId);
-        }
-        if !signature.trusted_comment.starts_with("trusted comment: ") {
-            return Err(Error::InvalidEncoding);
-        }
         if !ed25519::verify(bin, &self.key, &signature.signature) {
             return Err(Error::InvalidSignature);
         }
