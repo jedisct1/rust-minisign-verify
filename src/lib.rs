@@ -10,13 +10,13 @@
 //!    .expect("Unable to decode the public key");
 //!
 //! let signature = Signature::decode("untrusted comment: signature from minisign secret key
-//! RWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=
-//! trusted comment: timestamp:1555779966\tfile:test
-//! QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==")
+//! RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+//! trusted comment: timestamp:1633700835\tfile:test\tprehashed
+//! wLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==")
 //!     .expect("Unable to decode the signature");
 //!
 //! let bin = b"test";
-//! public_key.verify(&bin[..], &signature).expect("Signature didn't verify");
+//! public_key.verify(&bin[..], &signature, false).expect("Signature didn't verify");
 //! ```
 
 mod base64;
@@ -192,7 +192,14 @@ impl PublicKey {
     }
 
     /// Verify that `signature` is a valid signature for `bin` using this public key
-    pub fn verify(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
+    /// `allow_legacy` should only be set to `true` in order to support signatures made
+    /// by older versions of Minisign.
+    pub fn verify(
+        &self,
+        bin: &[u8],
+        signature: &Signature,
+        allow_legacy: bool,
+    ) -> Result<(), Error> {
         if self.key_id != signature.key_id {
             return Err(Error::UnexpectedKeyId);
         }
@@ -212,6 +219,8 @@ impl PublicKey {
             h = vec![0u8; BLAKE2B_OUTBYTES];
             Blake2b::blake2b(&mut h, bin);
             &h
+        } else if !allow_legacy {
+            return Err(Error::UnexpectedAlgorithm);
         } else {
             bin
         };
@@ -255,10 +264,10 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
         );
         let bin = b"test";
         public_key
-            .verify(&bin[..], &signature)
+            .verify(&bin[..], &signature, true)
             .expect("Signature didn't verify");
         let bin = b"Test";
-        match public_key.verify(&bin[..], &signature) {
+        match public_key.verify(&bin[..], &signature, true) {
             Err(Error::InvalidSignature) => {}
             _ => panic!("Invalid signature verified"),
         };
@@ -272,7 +281,7 @@ RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
             public_key2.untrusted_comment(),
             Some("untrusted comment: minisign public key E7620F1842B4E81F")
         );
-        match public_key2.verify(&bin[..], &signature) {
+        match public_key2.verify(&bin[..], &signature, true) {
             Err(Error::InvalidSignature) => {}
             _ => panic!("Invalid signature verified"),
         };
@@ -301,7 +310,7 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
         );
         let bin = b"test";
         public_key
-            .verify(&bin[..], &signature)
+            .verify(&bin[..], &signature, false)
             .expect("Signature didn't verify");
     }
 }

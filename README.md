@@ -19,5 +19,5 @@ QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfN
     ).expect("Unable to decode the signature");
 
 let bin = b"test";
-public_key.verify(&bin[..], &signature).expect("Signature didn't verify");
+public_key.verify(&bin[..], &signature, false).expect("Signature didn't verify");
 ```
