@@ -503,7 +503,7 @@ impl Fe {
     fn square(&self) -> Fe {
         let &Fe(f) = &self;
         let mut h = Fe::default();
-        fiat_25519_carry_square(&mut h.0, &f);
+        fiat_25519_carry_square(&mut h.0, f);
         h
     }
 
@@ -535,8 +535,8 @@ impl Fe {
         let z_250_50 = (0..50).fold(z_200_0, |x, _| x.square());
         let z_250_0 = z_250_50 * z_50_0;
         let z_255_5 = (0..5).fold(z_250_0, |x, _| x.square());
-        let z_255_21 = z_255_5 * z11;
-        z_255_21
+
+        z_255_5 * z11
     }
 
     fn is_nonzero(&self) -> bool {
@@ -550,7 +550,7 @@ impl Fe {
     fn neg(&self) -> Fe {
         let &Fe(f) = &self;
         let mut h = Fe::default();
-        fiat_25519_opp(&mut h.0, &f);
+        fiat_25519_opp(&mut h.0, f);
         h
     }
 
@@ -576,9 +576,8 @@ impl Fe {
         let z_250_50 = (0..50).fold(z_200_0, |x, _| x.square());
         let z_250_0 = z_250_50 * z_50_0;
         let z_252_2 = (0..2).fold(z_250_0, |x, _| x.square());
-        let z_252_3 = z_252_2 * *self;
 
-        z_252_3
+        z_252_2 * *self
     }
 }
 
