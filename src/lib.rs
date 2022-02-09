@@ -25,6 +25,9 @@ mod crypto;
 use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 use base64::{Base64, Decoder};
 use std::path::Path;
 use std::{fmt, fs, io};
@@ -94,6 +97,63 @@ pub struct Signature {
     signature: [u8; 64],
     trusted_comment: String,
     global_signature: [u8; 64],
+}
+
+/// A Verification Result to be passed over the WASM boundary
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+#[allow(dead_code)]
+pub struct VerificationResult {
+    pub signature_is_valid: bool,
+    error_message: String,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl VerificationResult {
+    #[wasm_bindgen(getter)]
+    pub fn error_message(&self) -> String {
+        self.error_message.clone()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn verify_signature(
+    signature_str: &str,
+    public_key_str: &str,
+    bin: &[u8],
+) -> VerificationResult {
+    let public_key = match PublicKey::decode(public_key_str) {
+        Ok(key) => key,
+        Err(error) => {
+            return VerificationResult {
+                signature_is_valid: false,
+                error_message: format!("Unable to decode the public key: {:?}", error),
+            }
+        }
+    };
+
+    let signature = match Signature::decode(signature_str) {
+        Ok(signature) => signature,
+        Err(error) => {
+            return VerificationResult {
+                signature_is_valid: false,
+                error_message: format!("Unable to decode the signature: {:?}", error),
+            }
+        }
+    };
+
+    match public_key.verify(bin, &signature, false) {
+        Ok(()) => VerificationResult {
+            signature_is_valid: true,
+            error_message: "".to_string(),
+        },
+        Err(error) => VerificationResult {
+            signature_is_valid: false,
+            error_message: format!("{:?}", error),
+        },
+    }
 }
 
 impl Signature {
