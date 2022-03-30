@@ -90,6 +90,7 @@ pub struct PublicKey {
 #[derive(Clone)]
 pub struct StreamVerifier<'a> {
     public_key: &'a PublicKey,
+    signature: &'a Signature,
     hasher: Blake2b,
 }
 
@@ -143,7 +144,7 @@ impl Signature {
             signature,
             trusted_comment,
             global_signature,
-            is_prehashed
+            is_prehashed,
         })
     }
 
@@ -164,7 +165,7 @@ impl Signature {
     }
 }
 
-impl PublicKey {
+impl<'a> PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
         let bin = Base64::decode_to_vec(&public_key_b64)?;
@@ -211,9 +212,6 @@ impl PublicKey {
     }
 
     fn verify_ed25519(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
-        if self.key_id != signature.key_id {
-            return Err(Error::UnexpectedKeyId);
-        }
         if !ed25519::verify(bin, &self.key, &signature.signature) {
             return Err(Error::InvalidSignature);
         }
@@ -236,6 +234,9 @@ impl PublicKey {
         signature: &Signature,
         allow_legacy: bool,
     ) -> Result<(), Error> {
+        if self.key_id != signature.key_id {
+            return Err(Error::UnexpectedKeyId);
+        }
         let mut h;
         let bin = if signature.is_prehashed {
             h = vec![0u8; BLAKE2B_OUTBYTES];
@@ -250,12 +251,16 @@ impl PublicKey {
     }
 
     /// Sets up a stream verifier that can be use iteratively.
-    pub fn verify_stream(&self) -> StreamVerifier {
-        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
-        StreamVerifier {
-            public_key: self,
-            hasher,
+    pub fn verify_stream(&'a self, signature: &'a Signature) -> Result<StreamVerifier, Error> {
+        if self.key_id != signature.key_id {
+            return Err(Error::UnexpectedKeyId);
         }
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        Ok(StreamVerifier {
+            public_key: self,
+            signature,
+            hasher,
+        })
     }
 }
 
@@ -264,10 +269,10 @@ impl<'a> StreamVerifier<'a> {
         self.hasher.update(buf);
     }
 
-    pub fn finalize(&mut self, signature: &Signature) -> Result<(), Error> {
+    pub fn finalize(&mut self) -> Result<(), Error> {
         let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
         self.hasher.finalize(&mut bin);
-        self.public_key.verify_ed25519(&bin, signature)
+        self.public_key.verify_ed25519(&bin, &self.signature)
     }
 }
 
@@ -368,7 +373,9 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
             signature.trusted_comment(),
             "timestamp:1556193335\tfile:test"
         );
-        let mut stream_verifier = public_key.verify_stream();
+        let mut stream_verifier = public_key
+            .verify_stream(&signature)
+            .expect("Can't extract StreamerVerifier");
 
         let bin: &[u8] = b"te";
         stream_verifier.update(bin);
@@ -376,8 +383,6 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
         let bin: &[u8] = b"st";
         stream_verifier.update(bin);
 
-        stream_verifier
-            .finalize(&signature)
-            .expect("Signature didn't verify");
+        stream_verifier.finalize().expect("Signature didn't verify");
     }
 }
