@@ -32,6 +32,7 @@ use std::{fmt, fs, io};
 pub enum Error {
     InvalidEncoding,
     InvalidSignature,
+    InvalidLegacyMode,
     IoError(io::Error),
     UnexpectedAlgorithm,
     UnexpectedKeyId,
@@ -49,6 +50,9 @@ impl std::error::Error for Error {
         match self {
             Error::InvalidEncoding => "Invalid encoding",
             Error::InvalidSignature => "Invalid signature",
+            Error::InvalidLegacyMode => {
+                "Invalid opreration - StreamVerifier only supports non-legacy mode"
+            }
             Error::IoError(_) => "I/O error",
             Error::UnexpectedAlgorithm => "Unexpected algorithm",
             Error::UnexpectedKeyId => "Unexpected key identifier",
@@ -85,15 +89,24 @@ pub struct PublicKey {
     key: [u8; 32],
 }
 
+/// A StreamVerifier to verify a signature against a data stream
+/// NOTE: this mode of operation does not support the legacy signature model
+#[derive(Clone)]
+pub struct StreamVerifier<'a> {
+    public_key: &'a PublicKey,
+    signature: &'a Signature,
+    hasher: Blake2b,
+}
+
 /// A Minisign signature
 #[derive(Clone)]
 pub struct Signature {
     untrusted_comment: String,
-    signature_algorithm: [u8; 2],
     key_id: [u8; 8],
     signature: [u8; 64],
     trusted_comment: String,
     global_signature: [u8; 64],
+    is_prehashed: bool,
 }
 
 impl Signature {
@@ -110,6 +123,9 @@ impl Signature {
         if bin2.len() != 64 {
             return Err(Error::InvalidEncoding);
         }
+        if !trusted_comment.starts_with("trusted comment: ") {
+            return Err(Error::InvalidEncoding);
+        }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin1[0..2]);
         let mut key_id = [0u8; 8];
@@ -118,13 +134,21 @@ impl Signature {
         signature.copy_from_slice(&bin1[10..74]);
         let mut global_signature = [0u8; 64];
         global_signature.copy_from_slice(&bin2);
+        let is_prehashed = match (
+            signature_algorithm[0],
+            signature_algorithm[1],
+        ) {
+            (0x45, 0x64) => false,
+            (0x45, 0x44) => true,
+            _ => return Err(Error::UnsupportedAlgorithm),
+        };
         Ok(Signature {
             untrusted_comment,
-            signature_algorithm,
             key_id,
             signature,
             trusted_comment,
             global_signature,
+            is_prehashed,
         })
     }
 
@@ -145,7 +169,7 @@ impl Signature {
     }
 }
 
-impl PublicKey {
+impl<'a> PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
         let bin = Base64::decode_to_vec(&public_key_b64)?;
@@ -191,6 +215,20 @@ impl PublicKey {
         self.untrusted_comment.as_deref()
     }
 
+    fn verify_ed25519(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
+        if !ed25519::verify(bin, &self.key, &signature.signature) {
+            return Err(Error::InvalidSignature);
+        }
+        let trusted_comment_bin = signature.trusted_comment().as_bytes();
+        let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
+        global.extend_from_slice(&signature.signature[..]);
+        global.extend_from_slice(trusted_comment_bin);
+        if !ed25519::verify(&global, &self.key, &signature.global_signature) {
+            return Err(Error::InvalidSignature);
+        }
+        Ok(())
+    }
+
     /// Verify that `signature` is a valid signature for `bin` using this public key
     /// `allow_legacy` should only be set to `true` in order to support signatures made
     /// by older versions of Minisign.
@@ -203,19 +241,8 @@ impl PublicKey {
         if self.key_id != signature.key_id {
             return Err(Error::UnexpectedKeyId);
         }
-        if !signature.trusted_comment.starts_with("trusted comment: ") {
-            return Err(Error::InvalidEncoding);
-        }
-        let prehashed = match (
-            signature.signature_algorithm[0],
-            signature.signature_algorithm[1],
-        ) {
-            (0x45, 0x64) => false,
-            (0x45, 0x44) => true,
-            _ => return Err(Error::UnsupportedAlgorithm),
-        };
         let mut h;
-        let bin = if prehashed {
+        let bin = if signature.is_prehashed {
             h = vec![0u8; BLAKE2B_OUTBYTES];
             Blake2b::blake2b(&mut h, bin);
             &h
@@ -224,17 +251,35 @@ impl PublicKey {
         } else {
             bin
         };
-        if !ed25519::verify(bin, &self.key, &signature.signature) {
-            return Err(Error::InvalidSignature);
+        self.verify_ed25519(bin, signature)
+    }
+
+    /// Sets up a stream verifier that can be use iteratively.
+    pub fn verify_stream(&'a self, signature: &'a Signature) -> Result<StreamVerifier, Error> {
+        if self.key_id != signature.key_id {
+            return Err(Error::UnexpectedKeyId);
         }
-        let trusted_comment_bin = signature.trusted_comment().as_bytes();
-        let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
-        global.extend_from_slice(&signature.signature[..]);
-        global.extend_from_slice(trusted_comment_bin);
-        if !ed25519::verify(&global, &self.key, &signature.global_signature) {
-            return Err(Error::InvalidSignature);
+        if !signature.is_prehashed {
+            return Err(Error::InvalidLegacyMode);
         }
-        Ok(())
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        Ok(StreamVerifier {
+            public_key: self,
+            signature,
+            hasher,
+        })
+    }
+}
+
+impl<'a> StreamVerifier<'a> {
+    pub fn update(&mut self, buf: &[u8]) {
+        self.hasher.update(buf);
+    }
+
+    pub fn finalize(&mut self) -> Result<(), Error> {
+        let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
+        self.hasher.finalize(&mut bin);
+        self.public_key.verify_ed25519(&bin, &self.signature)
     }
 }
 
@@ -312,5 +357,39 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
         public_key
             .verify(&bin[..], &signature, false)
             .expect("Signature didn't verify");
+    }
+
+    #[test]
+    fn verify_stream() {
+        let public_key =
+            PublicKey::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
+                .expect("Unable to decode the public key");
+        assert_eq!(public_key.untrusted_comment(), None);
+        let signature = Signature::decode(
+            "untrusted comment: signature from minisign secret key
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+trusted comment: timestamp:1556193335\tfile:test
+y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==",
+        )
+        .expect("Unable to decode the signature");
+        assert_eq!(
+            signature.untrusted_comment(),
+            "untrusted comment: signature from minisign secret key"
+        );
+        assert_eq!(
+            signature.trusted_comment(),
+            "timestamp:1556193335\tfile:test"
+        );
+        let mut stream_verifier = public_key
+            .verify_stream(&signature)
+            .expect("Can't extract StreamerVerifier");
+
+        let bin: &[u8] = b"te";
+        stream_verifier.update(bin);
+
+        let bin: &[u8] = b"st";
+        stream_verifier.update(bin);
+
+        stream_verifier.finalize().expect("Signature didn't verify");
     }
 }
