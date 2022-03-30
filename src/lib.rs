@@ -134,10 +134,7 @@ impl Signature {
         signature.copy_from_slice(&bin1[10..74]);
         let mut global_signature = [0u8; 64];
         global_signature.copy_from_slice(&bin2);
-        let is_prehashed = match (
-            signature_algorithm[0],
-            signature_algorithm[1],
-        ) {
+        let is_prehashed = match (signature_algorithm[0], signature_algorithm[1]) {
             (0x45, 0x64) => false,
             (0x45, 0x44) => true,
             _ => return Err(Error::UnsupportedAlgorithm),
@@ -279,7 +276,7 @@ impl<'a> StreamVerifier<'a> {
     pub fn finalize(&mut self) -> Result<(), Error> {
         let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
         self.hasher.finalize(&mut bin);
-        self.public_key.verify_ed25519(&bin, &self.signature)
+        self.public_key.verify_ed25519(&bin, self.signature)
     }
 }
 
