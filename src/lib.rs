@@ -88,8 +88,8 @@ pub struct PublicKey {
 /// A Minisign public key that streams data to verify the signature against
 /// NOTE: this mode of operation does not support the legacy signature model
 #[derive(Clone)]
-pub struct PublicKeyStream {
-    public_key: PublicKey,
+pub struct StreamVerifier<'a> {
+    public_key: &'a PublicKey,
     hasher: Blake2b,
 }
 
@@ -248,44 +248,26 @@ impl PublicKey {
         };
         self.verify_ed25519(bin, signature)
     }
+
+    /// Sets up a stream verifier that can be use iteratively.
+    pub fn verify_stream(&self) -> StreamVerifier {
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        StreamVerifier {
+            public_key: self,
+            hasher,
+        }
+    }
 }
 
-impl PublicKeyStream {
-    /// Create a Minisign public key from a base64 string
-    pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
-        let public_key = PublicKey::from_base64(public_key_b64)?;
-        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
-        Ok(PublicKeyStream { public_key, hasher })
+impl<'a> StreamVerifier<'a> {
+    pub fn update(&mut self, buf: &[u8]) {
+        self.hasher.update(buf);
     }
 
-    /// Create a Minisign public key from a string, as in the `minisign.pub` file
-    pub fn decode(lines_str: &str) -> Result<Self, Error> {
-        let public_key = PublicKey::decode(lines_str)?;
-        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
-        Ok(PublicKeyStream { public_key, hasher })
-    }
-
-    /// Load a Minisign key from a file (such as the `minisign.pub` file)
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let public_key = PublicKey::from_file(path)?;
-        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
-        Ok(PublicKeyStream { public_key, hasher })
-    }
-
-    /// Return the untrusted comment, if there is one
-    pub fn untrusted_comment(&self) -> Option<&str> {
-        self.public_key.untrusted_comment.as_deref()
-    }
-
-    /// Verify that `signature` is a valid signature for a buffered input using this public key
-    pub fn verify(&mut self, signature: &Signature) -> Result<(), Error> {
+    pub fn finalize(&mut self, signature: &Signature) -> Result<(), Error> {
         let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
         self.hasher.finalize(&mut bin);
         self.public_key.verify_ed25519(&bin, signature)
-    }
-
-    pub fn update(&mut self, bin: &[u8]) {
-        self.hasher.update(bin)
     }
 }
 
@@ -367,8 +349,8 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
 
     #[test]
     fn verify_stream() {
-        let mut public_key =
-            PublicKeyStream::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
+        let public_key =
+            PublicKey::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
                 .expect("Unable to decode the public key");
         assert_eq!(public_key.untrusted_comment(), None);
         let signature = Signature::decode(
@@ -386,10 +368,16 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
             signature.trusted_comment(),
             "timestamp:1556193335\tfile:test"
         );
-        public_key.update(b"te");
-        public_key.update(b"st");
-        public_key
-            .verify(&signature)
+        let mut stream_verifier = public_key.verify_stream();
+
+        let bin: &[u8] = b"te";
+        stream_verifier.update(bin);
+
+        let bin: &[u8] = b"st";
+        stream_verifier.update(bin);
+
+        stream_verifier
+            .finalize(&signature)
             .expect("Signature didn't verify");
     }
 }
