@@ -32,6 +32,7 @@ use std::{fmt, fs, io};
 pub enum Error {
     InvalidEncoding,
     InvalidSignature,
+    InvalidLegacyMode,
     IoError(io::Error),
     UnexpectedAlgorithm,
     UnexpectedKeyId,
@@ -49,6 +50,9 @@ impl std::error::Error for Error {
         match self {
             Error::InvalidEncoding => "Invalid encoding",
             Error::InvalidSignature => "Invalid signature",
+            Error::InvalidLegacyMode => {
+                "Invalid opreration - StreamVerifier only supports non-legacy mode"
+            }
             Error::IoError(_) => "I/O error",
             Error::UnexpectedAlgorithm => "Unexpected algorithm",
             Error::UnexpectedKeyId => "Unexpected key identifier",
@@ -85,7 +89,7 @@ pub struct PublicKey {
     key: [u8; 32],
 }
 
-/// A Minisign public key that streams data to verify the signature against
+/// A StreamVerifier to verify a signature against a data stream
 /// NOTE: this mode of operation does not support the legacy signature model
 #[derive(Clone)]
 pub struct StreamVerifier<'a> {
@@ -254,6 +258,9 @@ impl<'a> PublicKey {
     pub fn verify_stream(&'a self, signature: &'a Signature) -> Result<StreamVerifier, Error> {
         if self.key_id != signature.key_id {
             return Err(Error::UnexpectedKeyId);
+        }
+        if !signature.is_prehashed {
+            return Err(Error::InvalidLegacyMode);
         }
         let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
         Ok(StreamVerifier {
