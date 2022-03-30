@@ -97,11 +97,11 @@ pub struct PublicKeyStream {
 #[derive(Clone)]
 pub struct Signature {
     untrusted_comment: String,
-    signature_algorithm: [u8; 2],
     key_id: [u8; 8],
     signature: [u8; 64],
     trusted_comment: String,
     global_signature: [u8; 64],
+    is_prehashed: bool,
 }
 
 impl Signature {
@@ -118,6 +118,9 @@ impl Signature {
         if bin2.len() != 64 {
             return Err(Error::InvalidEncoding);
         }
+        if !trusted_comment.starts_with("trusted comment: ") {
+            return Err(Error::InvalidEncoding);
+        }
         let mut signature_algorithm = [0u8; 2];
         signature_algorithm.copy_from_slice(&bin1[0..2]);
         let mut key_id = [0u8; 8];
@@ -126,13 +129,21 @@ impl Signature {
         signature.copy_from_slice(&bin1[10..74]);
         let mut global_signature = [0u8; 64];
         global_signature.copy_from_slice(&bin2);
+        let is_prehashed = match (
+            signature_algorithm[0],
+            signature_algorithm[1],
+        ) {
+            (0x45, 0x64) => false,
+            (0x45, 0x44) => true,
+            _ => return Err(Error::UnsupportedAlgorithm),
+        };
         Ok(Signature {
             untrusted_comment,
-            signature_algorithm,
             key_id,
             signature,
             trusted_comment,
             global_signature,
+            is_prehashed
         })
     }
 
@@ -200,6 +211,9 @@ impl PublicKey {
     }
 
     fn verify_ed25519(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
+        if self.key_id != signature.key_id {
+            return Err(Error::UnexpectedKeyId);
+        }
         if !ed25519::verify(bin, &self.key, &signature.signature) {
             return Err(Error::InvalidSignature);
         }
@@ -222,22 +236,8 @@ impl PublicKey {
         signature: &Signature,
         allow_legacy: bool,
     ) -> Result<(), Error> {
-        if self.key_id != signature.key_id {
-            return Err(Error::UnexpectedKeyId);
-        }
-        if !signature.trusted_comment.starts_with("trusted comment: ") {
-            return Err(Error::InvalidEncoding);
-        }
-        let prehashed = match (
-            signature.signature_algorithm[0],
-            signature.signature_algorithm[1],
-        ) {
-            (0x45, 0x64) => false,
-            (0x45, 0x44) => true,
-            _ => return Err(Error::UnsupportedAlgorithm),
-        };
         let mut h;
-        let bin = if prehashed {
+        let bin = if signature.is_prehashed {
             h = vec![0u8; BLAKE2B_OUTBYTES];
             Blake2b::blake2b(&mut h, bin);
             &h
