@@ -85,6 +85,14 @@ pub struct PublicKey {
     key: [u8; 32],
 }
 
+/// A Minisign public key that streams data to verify the signature against
+/// NOTE: this mode of operation does not support the legacy signature model
+#[derive(Clone)]
+pub struct PublicKeyStream {
+    public_key: PublicKey,
+    hasher: Blake2b,
+}
+
 /// A Minisign signature
 #[derive(Clone)]
 pub struct Signature {
@@ -191,6 +199,20 @@ impl PublicKey {
         self.untrusted_comment.as_deref()
     }
 
+    fn verify_ed25519(&self, bin: &[u8], signature: &Signature) -> Result<(), Error> {
+        if !ed25519::verify(bin, &self.key, &signature.signature) {
+            return Err(Error::InvalidSignature);
+        }
+        let trusted_comment_bin = signature.trusted_comment().as_bytes();
+        let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
+        global.extend_from_slice(&signature.signature[..]);
+        global.extend_from_slice(trusted_comment_bin);
+        if !ed25519::verify(&global, &self.key, &signature.global_signature) {
+            return Err(Error::InvalidSignature);
+        }
+        Ok(())
+    }
+
     /// Verify that `signature` is a valid signature for `bin` using this public key
     /// `allow_legacy` should only be set to `true` in order to support signatures made
     /// by older versions of Minisign.
@@ -224,17 +246,46 @@ impl PublicKey {
         } else {
             bin
         };
-        if !ed25519::verify(bin, &self.key, &signature.signature) {
-            return Err(Error::InvalidSignature);
-        }
-        let trusted_comment_bin = signature.trusted_comment().as_bytes();
-        let mut global = Vec::with_capacity(signature.signature.len() + trusted_comment_bin.len());
-        global.extend_from_slice(&signature.signature[..]);
-        global.extend_from_slice(trusted_comment_bin);
-        if !ed25519::verify(&global, &self.key, &signature.global_signature) {
-            return Err(Error::InvalidSignature);
-        }
-        Ok(())
+        self.verify_ed25519(bin, signature)
+    }
+}
+
+impl PublicKeyStream {
+    /// Create a Minisign public key from a base64 string
+    pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
+        let public_key = PublicKey::from_base64(public_key_b64)?;
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        Ok(PublicKeyStream { public_key, hasher })
+    }
+
+    /// Create a Minisign public key from a string, as in the `minisign.pub` file
+    pub fn decode(lines_str: &str) -> Result<Self, Error> {
+        let public_key = PublicKey::decode(lines_str)?;
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        Ok(PublicKeyStream { public_key, hasher })
+    }
+
+    /// Load a Minisign key from a file (such as the `minisign.pub` file)
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let public_key = PublicKey::from_file(path)?;
+        let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
+        Ok(PublicKeyStream { public_key, hasher })
+    }
+
+    /// Return the untrusted comment, if there is one
+    pub fn untrusted_comment(&self) -> Option<&str> {
+        self.public_key.untrusted_comment.as_deref()
+    }
+
+    /// Verify that `signature` is a valid signature for a buffered input using this public key
+    pub fn verify(&mut self, signature: &Signature) -> Result<(), Error> {
+        let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
+        self.hasher.finalize(&mut bin);
+        self.public_key.verify_ed25519(&bin, signature)
+    }
+
+    pub fn update(&mut self, bin: &[u8]) {
+        self.hasher.update(bin)
     }
 }
 
@@ -311,6 +362,34 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
         let bin = b"test";
         public_key
             .verify(&bin[..], &signature, false)
+            .expect("Signature didn't verify");
+    }
+
+    #[test]
+    fn verify_stream() {
+        let mut public_key =
+            PublicKeyStream::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
+                .expect("Unable to decode the public key");
+        assert_eq!(public_key.untrusted_comment(), None);
+        let signature = Signature::decode(
+            "untrusted comment: signature from minisign secret key
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+trusted comment: timestamp:1556193335\tfile:test
+y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==",
+        )
+        .expect("Unable to decode the signature");
+        assert_eq!(
+            signature.untrusted_comment(),
+            "untrusted comment: signature from minisign secret key"
+        );
+        assert_eq!(
+            signature.trusted_comment(),
+            "timestamp:1556193335\tfile:test"
+        );
+        public_key.update(b"te");
+        public_key.update(b"st");
+        public_key
+            .verify(&signature)
             .expect("Signature didn't verify");
     }
 }
