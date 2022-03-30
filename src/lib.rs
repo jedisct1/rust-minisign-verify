@@ -32,11 +32,11 @@ use std::{fmt, fs, io};
 pub enum Error {
     InvalidEncoding,
     InvalidSignature,
-    InvalidLegacyMode,
     IoError(io::Error),
     UnexpectedAlgorithm,
     UnexpectedKeyId,
     UnsupportedAlgorithm,
+    UnsupportedLegacyMode,
 }
 
 impl fmt::Display for Error {
@@ -50,13 +50,13 @@ impl std::error::Error for Error {
         match self {
             Error::InvalidEncoding => "Invalid encoding",
             Error::InvalidSignature => "Invalid signature",
-            Error::InvalidLegacyMode => {
-                "Invalid opreration - StreamVerifier only supports non-legacy mode"
-            }
             Error::IoError(_) => "I/O error",
             Error::UnexpectedAlgorithm => "Unexpected algorithm",
             Error::UnexpectedKeyId => "Unexpected key identifier",
             Error::UnsupportedAlgorithm => "Unsupported algorithm",
+            Error::UnsupportedLegacyMode => {
+                "Unsupported operration - StreamVerifier only supports non-legacy mode"
+            }
         }
     }
 
@@ -257,7 +257,7 @@ impl<'a> PublicKey {
             return Err(Error::UnexpectedKeyId);
         }
         if !signature.is_prehashed {
-            return Err(Error::InvalidLegacyMode);
+            return Err(Error::UnsupportedLegacyMode);
         }
         let hasher = Blake2b::new(BLAKE2B_OUTBYTES);
         Ok(StreamVerifier {
