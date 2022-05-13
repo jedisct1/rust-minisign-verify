@@ -7,27 +7,33 @@
 //!
 //! let public_key =
 //!     PublicKey::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
-//!    .expect("Unable to decode the public key");
+//!         .expect("Unable to decode the public key");
 //!
-//! let signature = Signature::decode("untrusted comment: signature from minisign secret key
-//! RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+//! let signature = Signature::decode(
+//!     "untrusted comment: signature from minisign secret key
+//! RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/\
+//!      z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
 //! trusted comment: timestamp:1633700835\tfile:test\tprehashed
-//! wLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==")
-//!     .expect("Unable to decode the signature");
+//! wLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==",
+//! )
+//! .expect("Unable to decode the signature");
 //!
 //! let bin = b"test";
-//! public_key.verify(&bin[..], &signature, false).expect("Signature didn't verify");
+//! public_key
+//!     .verify(&bin[..], &signature, false)
+//!     .expect("Signature didn't verify");
 //! ```
 
 mod base64;
 mod crypto;
 
-use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
-use crate::crypto::ed25519;
-
-use base64::{Base64, Decoder};
 use std::path::Path;
 use std::{fmt, fs, io};
+
+use base64::{Base64, Decoder};
+
+use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
+use crate::crypto::ed25519;
 #[derive(Debug)]
 pub enum Error {
     InvalidEncoding,
@@ -191,7 +197,8 @@ impl<'a> PublicKey {
         })
     }
 
-    /// Create a Minisign public key from a string, as in the `minisign.pub` file
+    /// Create a Minisign public key from a string, as in the `minisign.pub`
+    /// file
     pub fn decode(lines_str: &str) -> Result<Self, Error> {
         let mut lines = lines_str.lines();
         let untrusted_comment = lines.next().ok_or(Error::InvalidEncoding)?;
@@ -226,9 +233,9 @@ impl<'a> PublicKey {
         Ok(())
     }
 
-    /// Verify that `signature` is a valid signature for `bin` using this public key
-    /// `allow_legacy` should only be set to `true` in order to support signatures made
-    /// by older versions of Minisign.
+    /// Verify that `signature` is a valid signature for `bin` using this public
+    /// key `allow_legacy` should only be set to `true` in order to support
+    /// signatures made by older versions of Minisign.
     pub fn verify(
         &self,
         bin: &[u8],
@@ -337,7 +344,8 @@ RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
         assert_eq!(public_key.untrusted_comment(), None);
         let signature = Signature::decode(
             "untrusted comment: signature from minisign secret key
-RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/\
+             z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
 trusted comment: timestamp:1556193335\tfile:test
 y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==",
         )
@@ -364,7 +372,8 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
         assert_eq!(public_key.untrusted_comment(), None);
         let signature = Signature::decode(
             "untrusted comment: signature from minisign secret key
-RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/\
+             z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
 trusted comment: timestamp:1556193335\tfile:test
 y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==",
         )
