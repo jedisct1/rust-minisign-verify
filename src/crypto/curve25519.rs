@@ -1182,7 +1182,7 @@ pub fn sc_reduce(s: &mut [u8]) {
     s11 += carry10;
     s10 -= carry10 << 21;
 
-    s[0] = (s0 >> 0) as u8;
+    s[0] = s0 as u8;
     s[1] = (s0 >> 8) as u8;
     s[2] = ((s0 >> 16) | (s1 << 5)) as u8;
     s[3] = (s1 >> 3) as u8;
@@ -1203,7 +1203,7 @@ pub fn sc_reduce(s: &mut [u8]) {
     s[18] = ((s6 >> 18) | (s7 << 3)) as u8;
     s[19] = (s7 >> 5) as u8;
     s[20] = (s7 >> 13) as u8;
-    s[21] = (s8 >> 0) as u8;
+    s[21] = s8 as u8;
     s[22] = (s8 >> 8) as u8;
     s[23] = ((s8 >> 16) | (s9 << 5)) as u8;
     s[24] = (s9 >> 3) as u8;

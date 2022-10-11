@@ -175,7 +175,7 @@ impl Signature {
 impl<'a> PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
-        let bin = Base64::decode_to_vec(&public_key_b64)?;
+        let bin = Base64::decode_to_vec(public_key_b64)?;
         if bin.len() != 42 {
             return Err(Error::InvalidEncoding);
         }
