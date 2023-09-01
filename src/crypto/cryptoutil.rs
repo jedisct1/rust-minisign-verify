@@ -132,9 +132,9 @@ pub trait FixedBuffer {
     fn input<F: FnMut(&[u8])>(&mut self, input: &[u8], func: F);
     fn reset(&mut self);
     fn zero_until(&mut self, idx: usize);
-    fn next<'s>(&'s mut self, len: usize) -> &'s mut [u8];
-    fn full_buffer<'s>(&'s mut self) -> &'s [u8];
-    fn current_buffer<'s>(&'s mut self) -> &'s [u8];
+    fn next(&mut self, len: usize) -> &mut [u8];
+    fn full_buffer(&mut self) -> &[u8];
+    fn current_buffer(&mut self) -> &[u8];
     fn position(&self) -> usize;
     fn remaining(&self) -> usize;
     fn size(&self) -> usize;
