@@ -65,15 +65,6 @@ impl Base64Impl {
     }
 
     #[inline]
-    fn b64_byte_to_char(x: u8) -> u8 {
-        (Self::_lt(x, 26) & (x.wrapping_add(b'A')))
-            | (Self::_ge(x, 26) & Self::_lt(x, 52) & (x.wrapping_add(b'a'.wrapping_sub(26))))
-            | (Self::_ge(x, 52) & Self::_lt(x, 62) & (x.wrapping_add(b'0'.wrapping_sub(52))))
-            | (Self::_eq(x, 62) & b'+')
-            | (Self::_eq(x, 63) & b'/')
-    }
-
-    #[inline]
     fn b64_char_to_byte(c: u8) -> u8 {
         let x = (Self::_ge(c, b'A') & Self::_le(c, b'Z') & (c.wrapping_sub(b'A')))
             | (Self::_ge(c, b'a') & Self::_le(c, b'z') & (c.wrapping_sub(b'a'.wrapping_sub(26))))
@@ -81,42 +72,6 @@ impl Base64Impl {
             | (Self::_eq(c, b'+') & 62)
             | (Self::_eq(c, b'/') & 63);
         x | (Self::_eq(x, 0) & (Self::_eq(c, b'A') ^ 0xff))
-    }
-
-    pub fn encode<'t>(b64: &'t mut [u8], bin: &[u8]) -> Result<&'t [u8], Error> {
-        let bin_len = bin.len();
-        let b64_maxlen = b64.len();
-        let mut acc_len = 0usize;
-        let mut b64_pos = 0usize;
-        let mut acc = 0u16;
-
-        let nibbles = bin_len / 3;
-        let remainder = bin_len - 3 * nibbles;
-        let mut b64_len = nibbles * 4;
-        if remainder != 0 {
-            b64_len += 4;
-        }
-        if b64_maxlen < b64_len {
-            return Err(Error::Overflow);
-        }
-        for &v in bin {
-            acc = (acc << 8) + v as u16;
-            acc_len += 8;
-            while acc_len >= 6 {
-                acc_len -= 6;
-                b64[b64_pos] = Self::b64_byte_to_char(((acc >> acc_len) & 0x3f) as u8);
-                b64_pos += 1;
-            }
-        }
-        if acc_len > 0 {
-            b64[b64_pos] = Self::b64_byte_to_char(((acc << (6 - acc_len)) & 0x3f) as u8);
-            b64_pos += 1;
-        }
-        while b64_pos < b64_len {
-            b64[b64_pos] = b'=';
-            b64_pos += 1
-        }
-        Ok(&b64[..b64_pos])
     }
 
     fn skip_padding(b64: &[u8], mut padding_len: usize) -> Result<&[u8], Error> {
