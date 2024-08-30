@@ -21,24 +21,6 @@ impl Display for Error {
     }
 }
 
-pub trait Encoder {
-    /// Length of `bin_len` bytes after encoding.
-    fn encoded_len(bin_len: usize) -> Result<usize, Error>;
-
-    /// Encode `bin` into `encoded`.
-    /// The output buffer can be larger than required; the returned slice is
-    /// a view of the buffer with the correct length.
-    fn encode<IN: AsRef<[u8]>>(encoded: &mut [u8], bin: IN) -> Result<&[u8], Error>;
-
-    /// Encode `bin` as a `String`.
-    fn encode_to_string<IN: AsRef<[u8]>>(bin: IN) -> Result<String, Error> {
-        let mut encoded = vec![0u8; Self::encoded_len(bin.as_ref().len())?];
-        let encoded_len = Self::encode(&mut encoded, bin)?.len();
-        encoded.truncate(encoded_len);
-        Ok(String::from_utf8(encoded).unwrap())
-    }
-}
-
 pub trait Decoder {
     /// Decode `encoded` into `bin`.
     /// The output buffer can be larger than required; the returned slice is
@@ -99,17 +81,6 @@ impl Base64Impl {
             | (Self::_eq(c, b'+') & 62)
             | (Self::_eq(c, b'/') & 63);
         x | (Self::_eq(x, 0) & (Self::_eq(c, b'A') ^ 0xff))
-    }
-
-    #[inline]
-    fn encoded_len(bin_len: usize) -> Result<usize, Error> {
-        let nibbles = bin_len / 3;
-        let rounded = nibbles * 3;
-        let pad = bin_len - rounded;
-        Ok(nibbles.checked_mul(4).ok_or(Error::Overflow)?
-            + ((pad | (pad >> 1)) & 1)
-                * (4 - (!(((1_usize & 2) >> 1).wrapping_sub(1)) & (3 - pad)))
-            + 1)
     }
 
     pub fn encode<'t>(b64: &'t mut [u8], bin: &[u8]) -> Result<&'t [u8], Error> {
@@ -207,18 +178,6 @@ impl Base64Impl {
 
 pub struct Base64;
 
-impl Encoder for Base64 {
-    #[inline]
-    fn encoded_len(bin_len: usize) -> Result<usize, Error> {
-        Base64Impl::encoded_len(bin_len)
-    }
-
-    #[inline]
-    fn encode<IN: AsRef<[u8]>>(b64: &mut [u8], bin: IN) -> Result<&[u8], Error> {
-        Base64Impl::encode(b64, bin.as_ref())
-    }
-}
-
 impl Decoder for Base64 {
     #[inline]
     fn decode<IN: AsRef<[u8]>>(bin: &mut [u8], b64: IN) -> Result<&[u8], Error> {
@@ -227,33 +186,11 @@ impl Decoder for Base64 {
 }
 
 #[test]
-fn test_base64() {
-    let bin = [1u8, 5, 11, 15, 19, 131, 122];
-    let expected = "AQULDxODeg==";
-    let b64 = Base64::encode_to_string(bin).unwrap();
-    assert_eq!(b64, expected);
-    let bin2 = Base64::decode_to_vec(&b64).unwrap();
-    assert_eq!(bin, &bin2[..]);
-}
-
-#[test]
 fn test_base64_mising_padding() {
     let missing_padding = "AA";
     assert!(Base64::decode_to_vec(missing_padding).is_err());
     let missing_padding = "AAA";
     assert!(Base64::decode_to_vec(missing_padding).is_err());
-}
-
-#[test]
-fn test_base64_no_std() {
-    let bin = [1u8, 5, 11, 15, 19, 131, 122];
-    let expected = [65, 81, 85, 76, 68, 120, 79, 68, 101, 103, 61, 61];
-    let mut b64 = [0u8; 12];
-    let b64 = Base64::encode(&mut b64, bin).unwrap();
-    assert_eq!(b64, expected);
-    let mut bin2 = [0u8; 7];
-    let bin2 = Base64::decode(&mut bin2, b64).unwrap();
-    assert_eq!(bin, bin2);
 }
 
 #[test]
