@@ -72,7 +72,7 @@ impl Base64Impl {
         let b64_len = b64.len();
         let mut b64_pos = 0usize;
         while padding_len > 0 {
-            if b64_pos > b64_len {
+            if b64_pos >= b64_len {
                 return Err(Error::InvalidInput);
             }
             let c = b64[b64_pos];

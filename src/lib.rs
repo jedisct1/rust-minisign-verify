@@ -398,4 +398,9 @@ y/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+b
 
         stream_verifier.finalize().expect("Signature didn't verify");
     }
+
+    #[test]
+    fn rejects_invalid_base64() {
+        assert_eq!(Base64::decode_to_vec("AA="), Err(base64::Error::InvalidInput));
+    }
 }
