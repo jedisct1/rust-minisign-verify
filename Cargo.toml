@@ -1,6 +1,6 @@
 [package]
 name = "minisign-verify"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Frank Denis <github@pureftpd.org>"]
 description = "A small crate to verify Minisign signatures."
 readme = "README.md"
