@@ -24,6 +24,8 @@
 //!     .expect("Signature didn't verify");
 //! ```
 
+#![allow(elided_named_lifetimes)]
+
 mod base64;
 mod crypto;
 
