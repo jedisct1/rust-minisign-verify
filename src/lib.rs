@@ -1,14 +1,27 @@
-//! A small crate to verify Minisign signatures.
+//! A small crate to verify [Minisign](https://jedisct1.github.io/minisign/) signatures.
 //!
-//! # Example
+//! This library provides zero-dependency verification of Minisign signatures. Minisign is a
+//! dead simple tool to sign files and verify signatures, developed by Frank Denis
+//! (author of libsodium).
+//!
+//! ## Features
+//!
+//! * Verify signatures for both standard and pre-hashed modes
+//! * Streaming verification for large files
+//! * No external dependencies
+//! * Simple, auditable code
+//!
+//! ## Basic Usage
 //!
 //! ```rust
 //! use minisign_verify::{PublicKey, Signature};
 //!
+//! // Create a public key from a base64 string
 //! let public_key =
 //!     PublicKey::from_base64("RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3")
 //!         .expect("Unable to decode the public key");
 //!
+//! // Create a signature from a string
 //! let signature = Signature::decode(
 //!     "untrusted comment: signature from minisign secret key
 //! RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/\
@@ -18,13 +31,77 @@
 //! )
 //! .expect("Unable to decode the signature");
 //!
+//! // Verify the signature
 //! let bin = b"test";
 //! public_key
 //!     .verify(&bin[..], &signature, false)
 //!     .expect("Signature didn't verify");
 //! ```
-
-#![allow(elided_named_lifetimes)]
+//!
+//! ## Loading from Files
+//!
+//! ```rust,no_run
+//! use minisign_verify::{PublicKey, Signature};
+//! use std::path::Path;
+//!
+//! // Load a public key from a file
+//! let public_key = PublicKey::from_file(Path::new("minisign.pub"))
+//!     .expect("Unable to load the public key");
+//!
+//! // Load a signature from a file
+//! let signature = Signature::from_file(Path::new("file.sig"))
+//!     .expect("Unable to load the signature");
+//!
+//! // Load the file content to verify
+//! let content = std::fs::read("file").expect("Unable to read the file");
+//!
+//! // Verify the signature
+//! public_key
+//!     .verify(&content, &signature, false)
+//!     .expect("Signature didn't verify");
+//! ```
+//!
+//! ## Streaming Verification
+//!
+//! For large files, you can use streaming verification to avoid loading
+//! the entire file into memory at once:
+//!
+//! ```rust,no_run
+//! use minisign_verify::{PublicKey, Signature};
+//! use std::fs::File;
+//! use std::io::{self, Read};
+//! use std::path::Path;
+//!
+//! // Load a public key and signature
+//! let public_key = PublicKey::from_file(Path::new("minisign.pub"))
+//!     .expect("Unable to load the public key");
+//!
+//! let signature = Signature::from_file(Path::new("large_file.sig"))
+//!     .expect("Unable to load the signature");
+//!
+//! // Create a stream verifier
+//! let mut verifier = public_key.verify_stream(&signature)
+//!     .expect("Unable to create stream verifier");
+//!
+//! // Process the file in chunks
+//! let mut file = File::open("large_file").expect("Unable to open file");
+//! let mut buffer = [0u8; 8192]; // 8KB buffer
+//!
+//! loop {
+//!     let bytes_read = file.read(&mut buffer).expect("Error reading file");
+//!     if bytes_read == 0 {
+//!         break; // End of file
+//!     }
+//!
+//!     verifier.update(&buffer[..bytes_read]);
+//! }
+//!
+//! // Verify the signature
+//! verifier.finalize().expect("Signature verification failed");
+//! ```
+//!
+//! Note that the streaming verification mode only works with pre-hashed signatures
+//! (the default in newer versions of Minisign).
 
 mod base64;
 mod crypto;
@@ -38,37 +115,48 @@ use crate::crypto::blake2b::{Blake2b, BLAKE2B_OUTBYTES};
 use crate::crypto::ed25519;
 #[derive(Debug)]
 pub enum Error {
+    /// The provided string couldn't be decoded properly
     InvalidEncoding,
+    /// The signature verification failed
     InvalidSignature,
+    /// An I/O error occurred
     IoError(io::Error),
+    /// The algorithm doesn't match what was expected
     UnexpectedAlgorithm,
+    /// The key ID from the signature doesn't match the public key
     UnexpectedKeyId,
+    /// The specified algorithm is not supported by this implementation
     UnsupportedAlgorithm,
+    /// Legacy mode is not supported in streaming verification
     UnsupportedLegacyMode,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Error::InvalidEncoding => write!(f, "Invalid encoding in minisign data"),
+            Error::InvalidSignature => write!(f, "The signature verification failed"),
+            Error::IoError(e) => write!(f, "I/O error: {}", e),
+            Error::UnexpectedAlgorithm => write!(f, "Unexpected signature algorithm"),
+            Error::UnexpectedKeyId => write!(
+                f,
+                "The signature was created with a different key than the one provided"
+            ),
+            Error::UnsupportedAlgorithm => write!(
+                f,
+                "This signature algorithm is not supported by this implementation"
+            ),
+            Error::UnsupportedLegacyMode => {
+                write!(f, "StreamVerifier only supports non-legacy mode signatures")
+            }
+        }
     }
 }
 
 impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match self {
-            Error::InvalidEncoding => "Invalid encoding",
-            Error::InvalidSignature => "Invalid signature",
-            Error::IoError(_) => "I/O error",
-            Error::UnexpectedAlgorithm => "Unexpected algorithm",
-            Error::UnexpectedKeyId => "Unexpected key identifier",
-            Error::UnsupportedAlgorithm => "Unsupported algorithm",
-            Error::UnsupportedLegacyMode => {
-                "Unsupported operration - StreamVerifier only supports non-legacy mode"
-            }
-        }
-    }
+    // Note: description() is deprecated in favor of Display implementation
 
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::IoError(e) => Some(e),
             _ => None,
@@ -78,6 +166,8 @@ impl std::error::Error for Error {
 
 impl From<base64::Error> for Error {
     fn from(_e: base64::Error) -> Error {
+        // We could consider adding a dedicated Base64Error variant that includes the original error
+        // in the future, but for now we'll just use InvalidEncoding
         Error::InvalidEncoding
     }
 }
@@ -89,6 +179,13 @@ impl From<io::Error> for Error {
 }
 
 /// A Minisign public key
+///
+/// This struct represents a Minisign public key, which can be used to verify
+/// signatures. A public key can be created from a base64 string, read from a file,
+/// or parsed from a string in minisign.pub format.
+///
+/// The public key contains an Ed25519 key, a key ID for signature matching,
+/// and optionally an untrusted comment.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublicKey {
     untrusted_comment: Option<String>,
@@ -98,7 +195,11 @@ pub struct PublicKey {
 }
 
 /// A StreamVerifier to verify a signature against a data stream
-/// NOTE: this mode of operation does not support the legacy signature model
+///
+/// This mode of operation allows for verification of large files by processing them
+/// in chunks, without having to load the entire file into memory.
+///
+/// Note that this mode only works with pre-hashed signatures (not legacy mode).
 #[derive(Clone)]
 pub struct StreamVerifier<'a> {
     public_key: &'a PublicKey,
@@ -107,6 +208,15 @@ pub struct StreamVerifier<'a> {
 }
 
 /// A Minisign signature
+///
+/// This struct represents a Minisign signature, which contains:
+/// - An untrusted comment (usually identifies the key that created the signature)
+/// - The signature itself (Ed25519 signature of the message or its hash)
+/// - A trusted comment (usually contains timestamp and filename)
+/// - A global signature (Ed25519 signature of the signature and trusted comment)
+/// - A flag indicating if the signature was created in pre-hashed mode
+///
+/// Pre-hashed mode is the default in newer versions of Minisign.
 #[derive(Clone)]
 pub struct Signature {
     untrusted_comment: String,
@@ -174,7 +284,7 @@ impl Signature {
     }
 }
 
-impl<'a> PublicKey {
+impl PublicKey {
     /// Create a Minisign public key from a base64 string
     pub fn from_base64(public_key_b64: &str) -> Result<Self, Error> {
         let bin = Base64::decode_to_vec(public_key_b64)?;
@@ -261,7 +371,10 @@ impl<'a> PublicKey {
     }
 
     /// Sets up a stream verifier that can be use iteratively.
-    pub fn verify_stream(&'a self, signature: &'a Signature) -> Result<StreamVerifier, Error> {
+    pub fn verify_stream<'a>(
+        &'a self,
+        signature: &'a Signature,
+    ) -> Result<StreamVerifier<'a>, Error> {
         if self.key_id != signature.key_id {
             return Err(Error::UnexpectedKeyId);
         }
@@ -277,11 +390,21 @@ impl<'a> PublicKey {
     }
 }
 
-impl<'a> StreamVerifier<'a> {
+impl StreamVerifier<'_> {
+    /// Update the verifier with a chunk of data
+    ///
+    /// This method can be called multiple times with different chunks of the file
+    /// to be verified. The chunks will be hashed incrementally.
     pub fn update(&mut self, buf: &[u8]) {
         self.hasher.update(buf);
     }
 
+    /// Finalize the verification process
+    ///
+    /// This method must be called after all data has been processed with `update()`.
+    /// It computes the final hash and verifies the signature.
+    ///
+    /// Returns `Ok(())` if the signature is valid, or an error otherwise.
     pub fn finalize(&mut self) -> Result<(), Error> {
         let mut bin = vec![0u8; BLAKE2B_OUTBYTES];
         self.hasher.finalize(&mut bin);
