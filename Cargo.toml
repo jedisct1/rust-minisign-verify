@@ -2,9 +2,9 @@
 name = "minisign-verify"
 version = "0.2.5"
 authors = ["Frank Denis <github@pureftpd.org>"]
-description = "A small, zero-dependencies crate to verify Minisign signatures."
+description = "Minisign signature verification for files and streams with Ed25519. A small Rust library with no external dependencies."
 readme = "README.md"
-keywords = ["minisign", "ed25519", "signatures", "crypto"]
+keywords = ["minisign", "ed25519", "signatures", "verification", "streaming"]
 license = "MIT"
 homepage = "https://github.com/jedisct1/rust-minisign-verify"
 repository = "https://github.com/jedisct1/rust-minisign-verify"
