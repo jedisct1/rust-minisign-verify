@@ -1,6 +1,6 @@
 [package]
 name = "minisign-verify"
-version = "0.2.5"
+version = "0.3.0"
 authors = ["Frank Denis <github@pureftpd.org>"]
 description = "Minisign signature verification for files and streams with Ed25519. A small Rust library with no external dependencies."
 readme = "README.md"
